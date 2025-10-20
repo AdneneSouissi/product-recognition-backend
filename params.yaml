@@ -1,0 +1,19 @@
+experiment:
+  name: product-recognition
+
+data:
+  raw_dir: data/raw
+  processed_dir: data/processed
+  data_yaml: data.yaml  # Ultralytics dataset file path (user-provided)
+
+train:
+  model_uri: yolov8n.pt
+  epochs: 1
+  imgsz: 640
+
+eval:
+  # Extend with real evaluation params
+  enabled: true
+
+export:
+  artifact_path: exported_yolov8n.pt

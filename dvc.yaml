@@ -1,0 +1,28 @@
+stages:
+  prepare:
+    cmd: python training/prepare.py --params params.yaml
+    deps:
+      - training/prepare.py
+      - params.yaml
+    outs:
+      - data/processed
+  train:
+    cmd: python training/train.py --params params.yaml
+    deps:
+      - training/train.py
+      - params.yaml
+    outs:
+      - models
+  eval:
+    cmd: python training/eval.py --params params.yaml
+    deps:
+      - training/eval.py
+      - params.yaml
+  export:
+    cmd: python training/export.py --params params.yaml
+    deps:
+      - training/export.py
+      - params.yaml
+      - models/current.pt
+    outs:
+      - exported_yolov8n.pt
