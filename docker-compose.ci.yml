@@ -1,0 +1,13 @@
+version: '3.8'
+services:
+  api:
+    environment:
+      - SKIP_MODEL_LOAD=1
+    ports:
+      - "127.0.0.1:8000:8000"
+  prometheus:
+    ports:
+      - "127.0.0.1:9090:9090"
+  grafana:
+    ports:
+      - "127.0.0.1:3000:3000"

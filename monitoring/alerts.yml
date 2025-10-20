@@ -1,0 +1,19 @@
+groups:
+  - name: api-availability
+    rules:
+      - alert: ApiDown
+        expr: up{job="api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: API target is down
+          description: No scrape data for job=api
+      - alert: HighErrorRate
+        expr: sum(rate(requests_total{status=~"5.."}[5m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: API 5xx rate detected
+          description: The API is returning errors for 5 minutes

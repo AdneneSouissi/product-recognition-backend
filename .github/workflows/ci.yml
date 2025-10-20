@@ -23,6 +23,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          pip install pytest
       - name: Sanity Import And Byte Compile
         run: |
           python - << 'PY'
@@ -55,6 +56,9 @@ jobs:
           code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/readyz)
           echo "readyz status: $code"; test "$code" = "503"
           curl -f http://127.0.0.1:8000/metrics | head -n 20
+      - name: Run Pytest Health Tests
+        run: |
+          pytest -q tests/test_api_health.py
       - name: Diagnostics On Failure
         if: failure()
         run: |
@@ -126,3 +130,57 @@ jobs:
       - name: Skip Predict When Model Missing
         if: steps.model.outputs.has_model != 'true'
         run: echo "Model yolov8n.pt not found; skipping scheduled predict smoke."
+
+  monitoring_stack_smoke:
+    name: Monitoring Stack Smoke With Docker Compose
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: product-recognition-backend
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compose Up API Prometheus Grafana
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --build
+          docker ps
+      - name: Wait For API And Prometheus
+        run: |
+          for i in $(seq 1 120); do
+            if curl -fsS http://127.0.0.1:8000/healthz > /dev/null; then echo 'API up'; break; fi; sleep 1; done
+          for i in $(seq 1 120); do
+            if curl -fsS http://127.0.0.1:9090/-/ready > /dev/null; then echo 'Prometheus ready'; break; fi; sleep 1; done
+      - name: Generate Some Traffic
+        run: |
+          for i in $(seq 1 5); do curl -fsS http://127.0.0.1:8000/healthz > /dev/null; sleep 1; done
+          curl -fsS http://127.0.0.1:8000/version > /dev/null
+      - name: Verify Prometheus Target Up
+        run: |
+          curl -fsS "http://127.0.0.1:9090/api/v1/targets" | jq '.data.activeTargets[] | select(.labels.job=="api") | .health' | grep -E 'healthy' -q
+      - name: Query Requests Metric
+        run: |
+          # It might be zero if too soon; we accept a valid response
+          curl -fsS "http://127.0.0.1:9090/api/v1/query?query=sum(rate(requests_total[1m]))" | jq -e '.status == "success"' > /dev/null
+      - name: Validate Prometheus Rules If Promtool Available
+        run: |
+          if command -v promtool >/dev/null 2>&1; then promtool check rules monitoring/alerts.yml; else echo 'promtool not available, skipping'; fi
+      - name: Verify Grafana Login Page
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3000/login)
+          echo "grafana login status: $code"; [[ "$code" == 2* || "$code" == 3* ]] || exit 1
+      - name: Upload Monitoring Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: monitoring-configs
+          path: |
+            product-recognition-backend/monitoring/prometheus.yml
+            product-recognition-backend/monitoring/alerts.yml
+            product-recognition-backend/monitoring/grafana-dashboard.json
+      - name: Compose Logs On Failure
+        if: failure()
+        run: |
+          docker compose logs --no-color api prometheus grafana | tail -n 400 || true
+      - name: Compose Down
+        if: always()
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml down -v
