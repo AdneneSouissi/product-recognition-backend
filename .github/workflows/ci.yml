@@ -132,8 +132,8 @@ jobs:
         run: echo "Model yolov8n.pt not found; skipping scheduled predict smoke."
 
   monitoring_stack_smoke:
-    name: Monitoring Stack Smoke With Docker Compose
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    name: Monitoring Stack Smoke
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     defaults:
@@ -141,6 +141,10 @@ jobs:
         working-directory: product-recognition-backend
     steps:
       - uses: actions/checkout@v4
+      - name: Install jq
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y jq
       - name: Compose Up API Prometheus Grafana
         run: |
           docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --build
@@ -174,9 +178,9 @@ jobs:
         with:
           name: monitoring-configs
           path: |
-            product-recognition-backend/monitoring/prometheus.yml
-            product-recognition-backend/monitoring/alerts.yml
-            product-recognition-backend/monitoring/grafana-dashboard.json
+            monitoring/prometheus.yml
+            monitoring/alerts.yml
+            monitoring/grafana-dashboard.json
       - name: Compose Logs On Failure
         if: failure()
         run: |
